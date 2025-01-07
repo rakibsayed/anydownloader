@@ -1,0 +1,128 @@
+<UserControl x:Class="AnyDownloader.Presentation.Views.DownloaderPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d">
+	<Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+		<StackPanel Orientation="Vertical">
+			<!-- Outer Border for Styling -->
+			<Border CornerRadius="5" BorderThickness="0" Background="#303030"
+					Padding="0" Width="450"
+				HorizontalAlignment="Center">
+				<Grid>
+					<Grid.RowDefinitions>
+						<!-- Row for TextBox and Button -->
+						<RowDefinition Height="Auto" />
+						<!-- Row for Message Placeholder -->
+						<RowDefinition Height="Auto" />
+					</Grid.RowDefinitions>
+
+					<Grid.ColumnDefinitions>
+						<!-- Column for TextBox -->
+						<ColumnDefinition Width="*" />
+						<!-- Column for Button -->
+						<ColumnDefinition Width="Auto" />
+					</Grid.ColumnDefinitions>
+
+					<!-- TextBox for URL Input -->
+					<TextBox x:Name="DownloadUrlTextBox"
+							 Grid.Row="0" Grid.Column="0"
+							 Background="Transparent"
+							 Foreground="White"
+							 CaretBrush="White"
+							 BorderThickness="0"
+							 VerticalAlignment="Center"
+							 TextWrapping="Wrap"
+							 AcceptsReturn="False"
+							 HorizontalAlignment="Stretch"
+							 FontSize="17"
+							 Padding="12"
+							 MinHeight="40"
+							 MaxHeight="100"
+							 ToolTip="Enter the download URL"
+							 KeyDown="DownloadUrlTextBox_KeyDown"
+							 TextChanged="DownloadUrlTextBox_TextChanged"
+							 />
+
+					<!-- Start Download Button -->
+					<Button x:Name="StartDownloadButton"
+							Grid.Row="0" Grid.Column="1"
+							VerticalAlignment="Center"
+							HorizontalAlignment="Right"
+							Margin="10,0,10,0"
+							Background="Transparent"
+							BorderThickness="0"
+							ToolTip="Start Download"
+							Click="StartDownloadButton_Click"
+							Visibility="Visible">
+						<Button.Template>
+							<ControlTemplate TargetType="Button">
+								<Viewbox Width="30" Height="30">
+									<Grid>
+										<!-- SVG Path -->
+										<Path x:Name="SvgIcon1"
+											  Data="M11.71 15.18l-2 2.027a1.006 1.006 0 0 1-1.42 0l-2-2.027a1.025 1.025 0 0 1-.21-1.1.987.987 0 0 1 .92-.633h1V7.874a1 1 0 1 1 2 0v5.573h1a.987.987 0 0 1 .92.628 1.026 1.026 0 0 1-.21 1.105z"
+											  Fill="White" RenderTransformOrigin="0.5,0.5" />
+										<Path x:Name="SvgIcon2"
+											  Data="M14.29 4.563a5.475 5.475 0 0 0-10.58 0 4.056 4.056 0 0 0 .29 8.1h.593A2.962 2.962 0 0 1 6 11.59V7.874a3 3 0 1 1 6 0v3.718a2.955 2.955 0 0 1 1.407 1.07H14a4.056 4.056 0 0 0 .29-8.097z"
+											  Fill="White" RenderTransformOrigin="0.5,0.5" />
+									</Grid>
+								</Viewbox>
+								<ControlTemplate.Triggers>
+									<!-- Hover Effect -->
+									<Trigger Property="IsMouseOver" Value="True">
+										<Setter TargetName="SvgIcon1" Property="Fill" Value="#b0adac" />
+										<Setter TargetName="SvgIcon2" Property="Fill" Value="#b0adac" />
+										<Setter TargetName="SvgIcon1" Property="RenderTransform">
+											<Setter.Value>
+												<ScaleTransform ScaleX="1.2" ScaleY="1.2" />
+											</Setter.Value>
+										</Setter>
+										<Setter TargetName="SvgIcon2" Property="RenderTransform">
+											<Setter.Value>
+												<ScaleTransform ScaleX="1.2" ScaleY="1.2" />
+											</Setter.Value>
+										</Setter>
+									</Trigger>
+								</ControlTemplate.Triggers>
+							</ControlTemplate>
+						</Button.Template>
+					</Button>
+
+					<!-- Spinner -->
+					<Canvas x:Name="SpinnerCanvas"
+							Grid.Row="0" Grid.Column="1"
+							Width="30" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center"
+							Visibility="Collapsed">
+						<Ellipse Width="30" Height="30" StrokeThickness="4" Stroke="White"
+								 StrokeStartLineCap="Round" StrokeDashArray="20,6">
+							<Ellipse.RenderTransform>
+								<RotateTransform x:Name="SpinnerRotateTransform" CenterX="15" CenterY="15" />
+							</Ellipse.RenderTransform>
+						</Ellipse>
+						<Canvas.Resources>
+							<Storyboard x:Key="SpinnerAnimation" RepeatBehavior="Forever">
+								<DoubleAnimation
+									Storyboard.TargetName="SpinnerRotateTransform"
+									Storyboard.TargetProperty="Angle"
+									From="0" To="360"
+									Duration="0:00:01.5" />
+							</Storyboard>
+						</Canvas.Resources>
+					</Canvas>
+				</Grid>
+			</Border>
+
+			<!-- Message Placeholder -->
+			<TextBlock x:Name="StatusMessageTextBlock"
+					   HorizontalAlignment="Center"
+					   Margin="10,5,0,0"
+					   Width="450"
+					   Foreground="LightGray"
+					   FontSize="14"
+					   Visibility="Collapsed"
+					   TextWrapping="Wrap"/>
+		</StackPanel>
+	</Grid>
+</UserControl>

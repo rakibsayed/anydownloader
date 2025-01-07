@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AnyDownloader.Core\AnyDownloader.Core.csproj" />
     <ProjectReference Include="..\AnyDownloader.Infrastructure\AnyDownloader.Infrastructure.csproj" />
+	  <ProjectReference Include="..\AnyDownloader.Shared\AnyDownloader.Shared.csproj" />
   </ItemGroup>
 
 </Project>

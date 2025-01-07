@@ -1,12 +1,10 @@
 ﻿<Window x:Class="AnyDownloader.Presentation.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:AnyDownloader.Presentation"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
-
-    </Grid>
+        xmlns:views="clr-namespace:AnyDownloader.Presentation.Views"
+        Title="AnyDownloader" Height="600" Width="800"
+        WindowStartupLocation="CenterScreen"
+        Background="#1a1a1a">
+    <!-- Content dynamically set in code-behind -->
+    <!-- Add other placeholders or future UI elements here -->
 </Window>

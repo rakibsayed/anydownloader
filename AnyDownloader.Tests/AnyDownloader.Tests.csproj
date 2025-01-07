@@ -4,7 +4,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-
+	  <LogLevel>Debug</LogLevel>
+	  <!-- Make sure log level is debug or higher -->
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -23,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AnyDownloader.Core\AnyDownloader.Core.csproj" />
     <ProjectReference Include="..\AnyDownloader.Infrastructure\AnyDownloader.Infrastructure.csproj" />
+	  <ProjectReference Include="..\AnyDownloader.Models\AnyDownloader.Models.csproj" />
   </ItemGroup>
 
 </Project>

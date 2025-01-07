@@ -1,68 +1,179 @@
 using AnyDownloader.Infrastructure;
-using System;
-using System.IO;
-using System.Threading.Tasks;
+using AnyDownloader.Core.Interfaces;
+using NSubstitute;
 using Xunit;
 
-/// <summary>
-/// Unit tests for the HttpDownloader class.
-/// Verifies the functionality of the HttpDownloader's methods for downloading files.
-/// </summary>
-public class HttpDownloaderTests
+namespace AnyDownloader.Tests
 {
     /// <summary>
-    /// Verifies that DownloadFileAsync successfully downloads a file to the specified destination.
+    /// Unit tests for the HttpDownloader class.
     /// </summary>
-    [Fact]
-    public async Task DownloadFileAsync_ShouldDownloadFileSuccessfully()
+    public class HttpDownloaderTests
     {
-        // Arrange: Create an instance of HttpDownloader and define a valid URL and destination path.
-        var httpDownloader = new HttpDownloader();
-        string url = "https://images.unsplash.com/photo-1721332154191-ba5f1534266e?q=80&w=735&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDF8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"; // Replace with a valid URL
-        string destinationPath = Path.Combine(Path.GetTempPath(), "http_downloader_testfile.jpg");
+        private readonly ILogger _loggerMock;
+        private readonly IFileSystem _fileSystemMock;
 
-        // Ensure directory exists.
-        var directoryPath = Path.GetDirectoryName(destinationPath);
-        if (directoryPath != null)
+        public HttpDownloaderTests()
         {
-            Directory.CreateDirectory(directoryPath);
+            _loggerMock = Substitute.For<ILogger>();
+            _fileSystemMock = Substitute.For<IFileSystem>();
         }
 
-        // Clean up any existing file.
-        if (File.Exists(destinationPath))
+        /// <summary>
+        /// Custom HttpMessageHandler for simulating HTTP responses.
+        /// </summary>
+        public class MockHttpMessageHandler : HttpMessageHandler
         {
-            File.Delete(destinationPath);
+            private readonly HttpResponseMessage? _response;
+            private readonly Exception? _exceptionToThrow;
+
+            public MockHttpMessageHandler(HttpResponseMessage response)
+            {
+                _response = response ?? throw new ArgumentNullException(nameof(response));
+            }
+
+            public MockHttpMessageHandler(Exception exceptionToThrow)
+            {
+                _exceptionToThrow = exceptionToThrow ?? throw new ArgumentNullException(nameof(exceptionToThrow));
+            }
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                if (_exceptionToThrow != null)
+                {
+                    throw _exceptionToThrow;
+                }
+
+                return Task.FromResult(_response ?? new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+            }
         }
 
-        // Act: Download the file.
-        await httpDownloader.DownloadFileAsync(url, destinationPath);
+        [Fact]
+        public async Task ResolveFilePathAsync_ShouldResolvePath_WithCorrectFileNameAndExtension()
+        {
+            // Arrange
+            string url = "https://fake-url.com/sample";
+            string destinationFolder = Path.GetTempPath();
 
-        // Assert: Verify that the file was downloaded successfully.
-        Assert.True(File.Exists(destinationPath), $"The file should have been downloaded to {destinationPath}.");
+            var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("Mock Content")
+            };
+            response.Content.Headers.ContentDisposition = new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment")
+            {
+                FileName = "mockedfile.jpg"
+            };
 
+            var mockHandler = new MockHttpMessageHandler(response);
+            var httpClient = new HttpClient(mockHandler);
+            var downloader = new HttpDownloader(httpClient, _fileSystemMock, _loggerMock);
 
-        // Cleanup: Remove the downloaded file.
-        File.Delete(destinationPath);
-        Assert.False(File.Exists(destinationPath), $"The file at {destinationPath} should have been deleted.");
-    }
+            // Act
+            var resolvedPath = await downloader.ResolveFilePathAsync(url, destinationFolder);
 
-    /// <summary>
-    /// Verifies that DownloadFileAsync throws an exception when provided with an invalid URL.
-    /// </summary>
-    [Fact]
-    public async Task DownloadFileAsync_ShouldThrowException_ForInvalidUrl()
-    {
-        // Arrange: Create an instance of HttpDownloader and define an invalid URL.
-        var httpDownloader = new HttpDownloader();
-        string invalidUrl = "invalid-url"; // Malformed URL
-        string destinationPath = Path.Combine(Path.GetTempPath(), "invalid_testfile.txt");
+            // Assert
+            Assert.Equal(Path.Combine(destinationFolder, "mockedfile.jpg"), resolvedPath);
+        }
 
-        // Act & Assert: Verify that an ArgumentException is thrown for the invalid URL.
-        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
-            httpDownloader.DownloadFileAsync(invalidUrl, destinationPath));
+        [Fact]
+        public async Task DownloadFileAsync_ShouldLogError_OnDownloadFailure()
+        {
+            // Arrange
+            string invalidUrl = "https://fake-url.com/nonexistentfile";
+            string destination = Path.Combine(Path.GetTempPath(), "nonexistentfile.txt");
+            string tempFilePath = destination + ".anydownloader";
 
-        // Verify the exception message for clarity.
-        Assert.Equal($"Invalid URL: {invalidUrl}", exception.Message);
+            var response = new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError);
+            var mockHandler = new MockHttpMessageHandler(response);
+            var httpClient = new HttpClient(mockHandler);
+            var downloader = new HttpDownloader(httpClient, _fileSystemMock, _loggerMock);
 
+            // Mock file system behavior
+            _fileSystemMock.FileExists(tempFilePath).Returns(true);
+            _fileSystemMock.When(fs => fs.DeleteFile(tempFilePath)).Do(_ => { });
+
+            // Act
+            var exception = await Assert.ThrowsAsync<HttpRequestException>(() => downloader.DownloadFileAsync(invalidUrl, destination));
+            Assert.Contains("Response status code does not indicate success", exception.Message);
+
+            // Verify cleanup
+            _fileSystemMock.Received(1).DeleteFile(tempFilePath);
+
+            // Verify logging
+            _loggerMock.Received(1).LogError(Arg.Is<string>(msg => msg.Contains("[DownloadFileAsync] Error occurred during download process.")), Arg.Any<Exception>());
+        }
+
+        [Fact]
+        public async Task DownloadFileAsync_ShouldDetectExtension_AndSaveFileCorrectly()
+        {
+            // Arrange
+            string validUrl = "https://fake-url.com/sample.txt";
+            string destinationFolder = Path.GetTempPath();
+            string tempFilePath = Path.Combine(destinationFolder, "sample.txt.anydownloader");
+            string destinationPath = Path.Combine(destinationFolder, "sample.txt");
+
+            var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new MemoryStream(System.Text.Encoding.UTF8.GetBytes("Mock Content")))
+            };
+            var mockHandler = new MockHttpMessageHandler(response);
+            var httpClient = new HttpClient(mockHandler);
+            var downloader = new HttpDownloader(httpClient, _fileSystemMock, _loggerMock);
+
+            // Mock file system behavior
+            _fileSystemMock.CreateFileStream(
+                tempFilePath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None)
+                .Returns(callInfo => File.Create(tempFilePath));
+
+            _fileSystemMock.FileExists(tempFilePath).Returns(callInfo => File.Exists(tempFilePath));
+            _fileSystemMock.FileExists(destinationPath).Returns(callInfo => File.Exists(destinationPath));
+
+            // Act
+            await downloader.DownloadFileAsync(validUrl, destinationPath);
+
+            // Assert
+            _fileSystemMock.Received(1).CreateFileStream(tempFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            _fileSystemMock.Received(1).RenameFile(tempFilePath, destinationPath);
+            _loggerMock.Received(1).LogInformation(Arg.Is<string>(msg => msg.Contains($"[DownloadFileAsync] Successfully downloaded file to: {destinationPath}")));
+
+            // Cleanup
+            if (File.Exists(destinationPath))
+            {
+                File.Delete(destinationPath);
+            }
+        }
+
+        [Fact]
+        public async Task DownloadFileAsync_ShouldCleanUpTemporaryFile_OnError()
+        {
+            // Arrange
+            string url = "https://fake-url.com/sample.txt";
+            string destinationFolder = Path.GetTempPath();
+            string destinationPath = Path.Combine(destinationFolder, "sample.txt");
+            string tempFilePath = Path.Combine(destinationFolder, "sample.txt.anydownloader");
+
+            var response = new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError);
+            var mockHandler = new MockHttpMessageHandler(response);
+            var httpClient = new HttpClient(mockHandler);
+            var downloader = new HttpDownloader(httpClient, _fileSystemMock, _loggerMock);
+
+            // Mock file system behavior
+            _fileSystemMock.FileExists(tempFilePath).Returns(true);
+            _fileSystemMock.When(fs => fs.DeleteFile(tempFilePath)).Do(_ => { });
+
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<HttpRequestException>(() => downloader.DownloadFileAsync(url, destinationPath));
+            Assert.Contains("Response status code does not indicate success", exception.Message);
+
+            // Verify cleanup
+            _fileSystemMock.Received(1).DeleteFile(tempFilePath);
+            _loggerMock.Received(1).LogError(
+                Arg.Is<string>(msg => msg.Contains("[DownloadFileAsync] Error occurred during download process.")),
+                Arg.Any<Exception>());
+
+        }
     }
 }

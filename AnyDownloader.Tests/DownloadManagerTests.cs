@@ -1,73 +1,76 @@
-using AnyDownloader.Core;
+using AnyDownloader.Core.Services;
 using AnyDownloader.Core.Interfaces;
+using AnyDownloader.Models;
 using NSubstitute;
+using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-/// <summary>
-/// Unit tests for the DownloadManager class.
-/// Verifies the functionality of the DownloadManager's methods using a mocked IHttpDownloader.
-/// </summary>
-public class DownloadManagerTests
+namespace AnyDownloader.Tests
 {
     /// <summary>
-    /// Verifies that StartDownloadAsync calls the DownloadFileAsync method on IHttpDownloader
-    /// and that the file is created at the specified destination.
+    /// Unit tests for the <see cref="DownloadManager"/> class.
     /// </summary>
-    [Fact]
-    public async Task StartDownloadAsync_ShouldCallHttpDownloader_AndCreateFile()
+    public class DownloadManagerTests
     {
-        // Arrange: Mock the IHttpDownloader and create a DownloadManager instance.
-        var httpDownloader = Substitute.For<IHttpDownloader>();
-        var downloadManager = new DownloadManager(httpDownloader);
+        private readonly IHttpDownloader _httpDownloaderMock;
+        private readonly ILogger _loggerMock;
+        private readonly DownloadManager _downloadManager;
 
-        string url = "https://images.unsplash.com/photo-1721332154191-ba5f1534266e?q=80&w=735&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDF8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"; 
-        // Replace with a valid URL
-        string destinationPath = Path.Combine(Path.GetTempPath(), "download_manager_testfile.jpg");
+        public DownloadManagerTests()
+        {
+            // Initialize mocks and the DownloadManager instance
+            _httpDownloaderMock = Substitute.For<IHttpDownloader>();
+            _loggerMock = Substitute.For<ILogger>();
+            _downloadManager = new DownloadManager(_httpDownloaderMock, _loggerMock);
+        }
 
-        // Simulate file creation for the mock.
-        httpDownloader.When(d => d.DownloadFileAsync(url, destinationPath))
-            .Do(_ => File.WriteAllText(destinationPath, "Mock file content"));
+        [Fact]
+        public async Task StartDownloadAsync_ShouldCallHttpDownloader_AndCreateFile()
+        {
+            // Arrange
+            string url = "https://example.com/sample.jpg";
+            string destinationDirectory = Path.GetTempPath();
+            string resolvedFilePath = Path.Combine(destinationDirectory, "sample.jpg");
 
-        // Act: Start the download process.
-        await downloadManager.StartDownloadAsync(url, destinationPath);
+            // Mock ResolveFilePathAsync to return a resolved file path
+            _httpDownloaderMock.ResolveFilePathAsync(url, destinationDirectory, Arg.Any<CancellationToken>())
+                               .Returns(Task.FromResult(resolvedFilePath));
 
-        // Assert: Verify that the file was created and the mock was called.
-        Assert.True(File.Exists(destinationPath), $"The file should have been downloaded to {destinationPath}.");
+            // Mock DownloadFileAsync to simulate file download
+            _httpDownloaderMock.When(d =>
+                d.DownloadFileAsync(url, resolvedFilePath, Arg.Any<Action<DownloadProgress>>(), Arg.Any<CancellationToken>()))
+                               .Do(_ => File.WriteAllText(resolvedFilePath, "Mock content"));
 
-        // Cleanup: Remove the test file.
-        File.Delete(destinationPath);
-        Assert.False(File.Exists(destinationPath), $"The file at {destinationPath} should have been deleted.");
-    }
+            // Act
+            await _downloadManager.StartDownloadAsync(url, destinationDirectory);
 
-    /// <summary>
-    /// Verifies that the PauseDownload method does not throw any exceptions.
-    /// </summary>
-    [Fact]
-    public void PauseDownload_ShouldNotThrowException()
-    {
-        // Arrange: Mock the IHttpDownloader and create a DownloadManager instance.
-        var httpDownloader = Substitute.For<IHttpDownloader>();
-        var downloadManager = new DownloadManager(httpDownloader);
+            // Assert
+            await _httpDownloaderMock.Received(1).ResolveFilePathAsync(url, destinationDirectory, Arg.Any<CancellationToken>());
+            await _httpDownloaderMock.Received(1).DownloadFileAsync(url, resolvedFilePath, Arg.Any<Action<DownloadProgress>>(), Arg.Any<CancellationToken>());
 
-        // Act & Assert: Call PauseDownload and ensure no exception is thrown.
-        var exception = Record.Exception(() => downloadManager.PauseDownload("test-id"));
-        Assert.Null(exception);
-    }
+            // Verify that the file was created
+            Assert.True(File.Exists(resolvedFilePath), "The file should exist after the download is completed.");
 
-    /// <summary>
-    /// Verifies that the ResumeDownload method does not throw any exceptions.
-    /// </summary>
-    [Fact]
-    public void ResumeDownload_ShouldNotThrowException()
-    {
-        // Arrange: Mock the IHttpDownloader and create a DownloadManager instance.
-        var httpDownloader = Substitute.For<IHttpDownloader>();
-        var downloadManager = new DownloadManager(httpDownloader);
+            // Cleanup
+            File.Delete(resolvedFilePath);
+        }
 
-        // Act & Assert: Call ResumeDownload and ensure no exception is thrown.
-        var exception = Record.Exception(() => downloadManager.ResumeDownload("test-id"));
-        Assert.Null(exception);
+        [Fact]
+        public async Task StartDownloadAsync_ShouldThrowException_WhenUrlIsInvalid()
+        {
+            // Arrange
+            string invalidUrl = "ftp://example.com/sample.jpg"; // Unsupported URL scheme
+            string destinationDirectory = Path.GetTempPath();
+
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<NotSupportedException>(() => _downloadManager.StartDownloadAsync(invalidUrl, destinationDirectory));
+            Assert.Equal("The 'ftp' scheme is not supported.", exception.Message);
+
+            // Verify that no download was attempted
+            await _httpDownloaderMock.DidNotReceiveWithAnyArgs().DownloadFileAsync(invalidUrl,destinationDirectory , default, default);
+        }
     }
 }
